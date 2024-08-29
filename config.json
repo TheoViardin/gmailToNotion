@@ -1,0 +1,12 @@
+{
+  "clients": [
+    {
+      "name": "Yellodit",
+      "emailAddresses": ["wpineau@yellodit.com", "info@vip.dominos.fr"]
+    },
+    {
+      "name": "Client 2",
+      "emailAddresses": ["address1@gmail.com", "theoviardin@gmail.com"]
+    }
+  ]
+}
