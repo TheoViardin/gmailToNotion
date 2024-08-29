@@ -1,5 +1,6 @@
 const { getFormatedMails } = require("./google");
 const { addClientMails, getExistingClients } = require("./notion");
+const logger = require("../logger");
 
 async function importMailsIntoNotion() {
   const mails = await getFormatedMails();
@@ -10,7 +11,7 @@ async function importMailsIntoNotion() {
     mailCount = Array.from(mails.values()).flat(1).length;
   }
 
-  console.log(`${mailCount} mail(s) récupérés, pour ${mails.size} client(s)`);
+  logger.info(`${mailCount} mail(s) récupérés, pour ${mails.size} client(s)`);
 
   if (mails) {
     const existingClients = await getExistingClients();
@@ -20,7 +21,7 @@ async function importMailsIntoNotion() {
     }
   }
 
-  console.log("Execution terminée");
+  logger.info("Execution terminée");
 }
 
 module.exports = {

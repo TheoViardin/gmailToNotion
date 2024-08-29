@@ -1,6 +1,8 @@
 const { Client } = require("@notionhq/client");
 const { markMailAsHandled } = require("./google");
 const environment = require("../env");
+const moment = require("moment-timezone");
+const logger = require("../logger");
 
 const notion = new Client({ auth: environment.default.notionApiKey });
 
@@ -39,7 +41,7 @@ async function createPage(name) {
     ],
   });
 
-  console.log(`Nouveau client "${name}" créé`);
+  logger.info(`Nouveau client "${name}" créé`);
 
   return page;
 }
@@ -90,27 +92,31 @@ async function addClientMails(existingClients, client, emails) {
 
   const firstBlock = await getPageFirstBlock(clientId);
 
-  const block = {
+  const blockBefore = {
     block_id: clientId,
     after: firstBlock?.id,
   };
 
-  const children = [];
+  const blockAfter = {
+    block_id: clientId,
+  };
+
+  const children = { before: [], after: [] };
 
   for (let email of emails) {
     if (!email) return;
 
-    console.log(`Importation de "${email.subject}"`);
+    logger.info(`Importation de "${email.subject}"`);
 
     const chunks = [];
-    for (let i = 0; i < email.body.length; i += 2000) {
+    for (let i = 0; i < email.body.length && chunks.length < 100; i += 2000) {
       chunks.push(email.body.slice(i, i + 2000));
     }
 
     const object = {
       type: "text",
       text: {
-        content: `Objet : ${email.subject}\n${email.date.format("DD/MM/YY à HH:mm")} - De : `,
+        content: `Objet : ${email.subject}\n${email.date.tz("Europe/Paris").format("DD/MM/YY à HH:mm")} - De : `,
       },
       annotations: {
         bold: true,
@@ -161,36 +167,67 @@ async function addClientMails(existingClients, client, emails) {
 
     email.body = email.body.replaceAll("\n", "\\n");
 
-    children.push({
-      object: "block",
-      type: "toggle",
-      toggle: {
-        rich_text: [object, ...fromBlocks, toBlock, ...toBlocks],
-        children: [
-          {
-            object: "block",
-            type: "quote",
-            quote: {
-              rich_text: chunks.map((chunk) => ({
-                type: "text",
-                text: {
-                  content: chunk,
-                },
-              })),
-            },
-          },
-        ],
-      },
-    });
-    
-    console.log(`Mail "${email.subject}" importé`);
+    const now = moment();
 
-    await markMailAsHandled(email);
+    const timeLimit = now.subtract({ minutes: 15 });
+
+    if (email.date > timeLimit) {
+      children.before.push({
+        object: "block",
+        type: "toggle",
+        toggle: {
+          rich_text: [object, ...fromBlocks, toBlock, ...toBlocks],
+          children: [
+            {
+              object: "block",
+              type: "quote",
+              quote: {
+                rich_text: chunks.map((chunk) => ({
+                  type: "text",
+                  text: {
+                    content: chunk,
+                  },
+                })),
+              },
+            },
+          ],
+        },
+      });
+    } else {
+      children.after.push({
+        object: "block",
+        type: "toggle",
+        toggle: {
+          rich_text: [object, ...fromBlocks, toBlock, ...toBlocks],
+          children: [
+            {
+              object: "block",
+              type: "quote",
+              quote: {
+                rich_text: chunks.map((chunk) => ({
+                  type: "text",
+                  text: {
+                    content: chunk,
+                  },
+                })),
+              },
+            },
+          ],
+        },
+      });
+    }
   }
 
-  block.children = children;
+  blockBefore.children = children.before;
+  blockAfter.children = children.after;
 
-  await notion.blocks.children.append(block);
+  await notion.blocks.children.append(blockBefore);
+  await notion.blocks.children.append(blockAfter);
+
+  for (let email of emails) {
+    await markMailAsHandled(email);
+    console.log(`Mail "${email.subject}" importé`);
+  }
 }
 
 module.exports = {

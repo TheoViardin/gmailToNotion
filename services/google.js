@@ -6,8 +6,8 @@ const fs = require("fs");
 const envfile = require("envfile");
 const express = require("express");
 const { NodeHtmlMarkdown } = require("node-html-markdown");
-const moment = require("moment");
-
+const moment = require("moment-timezone");
+const logger = require("../logger");
 var labelId;
 
 function getHandledEmailAddresses() {
@@ -21,10 +21,13 @@ function getHandledEmailAddresses() {
   return handledEmailAddresses;
 }
 
-function isHandledEmailAddress(emailAddress) {
+function isHandledEmailAddress(fromEmailAddress, toEmailAddress) {
   for (let client of config.clients) {
     for (let handledEmailAddress of client.emailAddresses) {
-      if (emailAddress.includes(handledEmailAddress)) {
+      if (
+        fromEmailAddress.includes(handledEmailAddress) ||
+        toEmailAddress.includes(handledEmailAddress)
+      ) {
         return client.name;
       }
     }
@@ -78,11 +81,15 @@ function requestGoogleAuthorizationCode() {
       tokens.expiry_date,
     );
 
-    throw new Error("Votre boite mail a été ajoutée ! Les mails commenceront à être importés à la prochain execution");
+    throw new Error(
+      "Votre boite mail a été ajoutée ! Les mails commenceront à être importés à la prochain execution",
+    );
   });
 
   app.listen(3000, () => {
-    console.debug("Veuillez cliquer sur le lien pour connecter votre boite mail");
+    logger.info(
+      "Veuillez vous rendre sur le lien pour connecter votre boite mail",
+    );
     console.log(url);
   });
 }
@@ -122,13 +129,22 @@ async function getGmailClient() {
 function buildGmailQuery() {
   const handledEmailAddresses = getHandledEmailAddresses();
 
-  let formatedEmailQuery = handledEmailAddresses.join(" from:");
+  let fromEmailQuery = handledEmailAddresses.join(" from:");
+  let toEmailQuery = handledEmailAddresses.join(" to:");
 
-  if (formatedEmailQuery) {
-    formatedEmailQuery = `{from:${formatedEmailQuery}}`;
+  if (fromEmailQuery) {
+    fromEmailQuery = `{from:${fromEmailQuery}}`;
   }
 
-  return `label:inbox ${formatedEmailQuery} NOT label:importedInNotion`;
+  if (toEmailQuery) {
+    toEmailQuery = `{to:${toEmailQuery}}`;
+  }
+
+  const emailQuery = `${fromEmailQuery} OR ${toEmailQuery} NOT label:importedInNotion`;
+
+  logger.info(emailQuery);
+
+  return emailQuery;
 }
 
 async function getFormatedMails() {
@@ -178,6 +194,7 @@ async function getFormatedMails() {
 
         // Extract the body of the email
         let body = "";
+        let files = [];
         const parts = msg.data.payload.parts;
 
         // Find the body in the payload parts (usually plain text or HTML)
@@ -187,6 +204,8 @@ async function getFormatedMails() {
           if (part && part.body && part.body.data) {
             body = base64url.decode(part.body.data);
           }
+
+          files = parts?.filter((part) => part.filename);
         } else {
           // Fallback to the main body if no parts are found
           body = msg.data.payload.body
@@ -194,15 +213,13 @@ async function getFormatedMails() {
             : "";
         }
 
-        const files = parts.filter((part) => part.filename);
-
         body = NodeHtmlMarkdown.translate(body);
 
         /*body = htmlToText(body, {
           wordwrap: false, // Preserve the original formatting without wrapping text
         });*/
 
-        const client = isHandledEmailAddress(from);
+        const client = isHandledEmailAddress(from, to);
 
         if (client) {
           let emailsForClient = emailData.get(client);
@@ -228,7 +245,7 @@ async function getFormatedMails() {
 
     return emailData;
   } catch (error) {
-    console.log(error);
+    logger.error(error);
     return new Map();
   }
 }
@@ -258,7 +275,7 @@ async function markMailAsHandled(email) {
     },
   });
 
-  console.log(`Mail "${email.subject}" marqué comme importé`);
+  logger.info(`Mail "${email.subject}" marqué comme importé`);
 
   return response;
 }
