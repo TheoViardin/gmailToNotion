@@ -12,7 +12,7 @@ function getPageContent(pageId, count = 100) {
 
 async function createPage(name) {
   const page = await notion.pages.create({
-    parent: { page_id: "d2713c69dc6d41098db7d3675dfb58c9" },
+    parent: { page_id: environment.default.mainNotionPage },
     properties: {
       title: {
         title: [
@@ -48,7 +48,7 @@ async function createPage(name) {
 
 async function getExistingClients() {
   const mainPageContent = await getPageContent(
-    "d2713c69dc6d41098db7d3675dfb58c9",
+    environment.default.mainNotionPage,
   );
 
   const existingClients = mainPageContent.results.map((block) => ({

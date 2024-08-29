@@ -10,4 +10,5 @@ module.exports.default = {
   googleApiRefreshToken: process.env.GOOGLE_API_REFRESH_TOKEN,
   googleApiTokenExpiry: process.env.GOOGLE_API_TOKEN_EXPIRY,
   notionApiKey: process.env.NOTION_API_KEY,
+  mainNotionPage: process.env.MAIN_NOTION_PAGE,
 };
