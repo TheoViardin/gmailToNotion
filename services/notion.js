@@ -1,8 +1,8 @@
 const { Client } = require("@notionhq/client");
-const { markMailAsHandled } = require("./google");
 const environment = require("../env");
 const moment = require("moment-timezone");
 const logger = require("../logger");
+const {pushFileToDrive} = require('./google');
 
 const notion = new Client({ auth: environment.default.notionApiKey });
 
@@ -108,6 +108,13 @@ async function addClientMails(existingClients, client, emails) {
 
     logger.info(`Importation de "${email.subject}"`);
 
+    const fileUrls = [];
+
+    for (let file of email.files) {
+      const url = await pushFileToDrive(email.id, file);
+      fileUrls.push(url);
+    }
+
     const chunks = [];
     for (let i = 0; i < email.body.length && chunks.length < 100; i += 2000) {
       chunks.push(email.body.slice(i, i + 2000));
@@ -190,6 +197,16 @@ async function addClientMails(existingClients, client, emails) {
                 })),
               },
             },
+            ...fileUrls.map(file => ({
+              type: "file",
+              file: {
+                type: "external",
+                external: {
+                  "url": file.url
+                },
+                name: file.name
+              }
+            })),
           ],
         },
       });
@@ -212,6 +229,16 @@ async function addClientMails(existingClients, client, emails) {
                 })),
               },
             },
+            ...fileUrls.map(file => ({
+              type: "file",
+              file: {
+                type: "external",
+                external: {
+                  "url": file.url
+                },
+                name: file.name
+              }
+            })),
           ],
         },
       });
@@ -223,11 +250,6 @@ async function addClientMails(existingClients, client, emails) {
 
   await notion.blocks.children.append(blockBefore);
   await notion.blocks.children.append(blockAfter);
-
-  for (let email of emails) {
-    await markMailAsHandled(email);
-    console.log(`Mail "${email.subject}" importé`);
-  }
 }
 
 module.exports = {

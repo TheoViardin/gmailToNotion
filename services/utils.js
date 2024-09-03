@@ -1,4 +1,4 @@
-const { getFormatedMails } = require("./google");
+const { getFormatedMails, markMailAsHandled } = require("./google");
 const { addClientMails, getExistingClients } = require("./notion");
 const logger = require("../logger");
 
@@ -17,7 +17,16 @@ async function importMailsIntoNotion() {
     const existingClients = await getExistingClients();
 
     for (let [client, clientMails] of mails) {
-      await addClientMails(existingClients, client, clientMails);
+      if (client === 'ignored_client') {
+        logger.info(`"${clientMails.length}" ignoré(s)`);
+      } else {
+        await addClientMails(existingClients, client, clientMails);
+      }
+      
+      for (let email of clientMails) {
+        await markMailAsHandled(email);
+        logger.info(`Mail "${email.subject}" géré`);
+      } 
     }
   }
 

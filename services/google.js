@@ -8,7 +8,10 @@ const express = require("express");
 const { NodeHtmlMarkdown } = require("node-html-markdown");
 const moment = require("moment-timezone");
 const logger = require("../logger");
+const { Readable } = require('stream');
+
 var labelId;
+var folderId;
 
 function getHandledEmailAddresses() {
   const handledEmailAddresses = [];
@@ -57,7 +60,7 @@ async function saveGoogleTokens(code, token, refreshToken, expiry) {
 }
 
 function requestGoogleAuthorizationCode() {
-  const scopes = ["https://www.googleapis.com/auth/gmail.modify"];
+  const scopes = ["https://www.googleapis.com/auth/gmail.modify", "https://www.googleapis.com/auth/drive.file"];
 
   const url = oAuth2Client.generateAuthUrl({
     // 'online' (default) or 'offline' (gets refresh_token)
@@ -124,6 +127,18 @@ async function getGmailClient() {
   await refreshAuthToken();
 
   return google.gmail({ version: "v1", auth: oAuth2Client });
+}
+
+async function getDriveClient() {
+  oAuth2Client.setCredentials({
+    access_token: environment.default.googleApiToken,
+    refresh_token: environment.default.googleApiRefreshToken,
+    expiry_date: environment.default.googleApiTokenExpiry,
+  });
+
+  await refreshAuthToken();
+
+  return google.drive({ version: "v3", auth: oAuth2Client });
 }
 
 function buildGmailQuery() {
@@ -205,7 +220,7 @@ async function getFormatedMails() {
             body = base64url.decode(part.body.data);
           }
 
-          files = parts?.filter((part) => part.filename);
+          files = parts?.filter((part) => part.filename && part.body && part.body?.attachmentId);
         } else {
           // Fallback to the main body if no parts are found
           body = msg.data.payload.body
@@ -219,27 +234,29 @@ async function getFormatedMails() {
           wordwrap: false, // Preserve the original formatting without wrapping text
         });*/
 
-        const client = isHandledEmailAddress(from, to);
+        let client = isHandledEmailAddress(from, to);
 
-        if (client) {
-          let emailsForClient = emailData.get(client);
-
-          if (!emailsForClient) {
-            emailsForClient = [];
-          }
-
-          emailsForClient.push({
-            id: message.id,
-            subject,
-            date,
-            from,
-            to,
-            body,
-            files,
-          });
-
-          emailData.set(client, emailsForClient);
+        if (!client) {
+          client = 'ignored_client';
         }
+
+        let emailsForClient = emailData.get(client);
+
+        if (!emailsForClient) {
+          emailsForClient = [];
+        }
+
+        emailsForClient.push({
+          id: message.id,
+          subject,
+          date,
+          from,
+          to,
+          body,
+          files,
+        });
+
+        emailData.set(client, emailsForClient);
       }
     }
 
@@ -264,6 +281,44 @@ async function getLabelId() {
   return botLabel?.id;
 }
 
+async function getFolderId() {
+  try {
+    const folderName = 'gmailToNotion';
+
+    const drive = await getDriveClient();
+
+    // Recherche du dossier par son nom
+    const res = await drive.files.list({
+      q: `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: 'files(id, name)',
+      spaces: 'drive',
+    });
+
+    const files = res.data.files;
+
+    if (files.length > 0) {
+      // Si le dossier existe, retourner son ID
+      return files[0].id;
+    } else {
+      // Sinon, créer un nouveau dossier
+      const fileMetadata = {
+        name: folderName,
+        mimeType: 'application/vnd.google-apps.folder',
+      };
+
+      const folder = await drive.files.create({
+        resource: fileMetadata,
+        fields: 'id',
+      });
+
+      logger.info(`Dossier créé avec l'ID: ${folder.data.id}`);
+      return folder.data.id;
+    }
+  } catch (error) {
+    logger.error('Erreur lors de la recherche ou de la création du dossier:', error);
+  }
+}
+
 async function markMailAsHandled(email) {
   const gmail = await getGmailClient();
 
@@ -280,8 +335,54 @@ async function markMailAsHandled(email) {
   return response;
 }
 
+async function pushFileToDrive(messageId, file) {
+  const gmail = await getGmailClient();
+  const drive = await getDriveClient();
+
+  const attachment = await gmail.users.messages.attachments.get({
+    userId: "me",
+    messageId,
+    id: file.body?.attachmentId,
+  });
+
+  const fileData = attachment.data.data;
+  const bufferStream = new Readable();
+  bufferStream._read = () => {}; // No-op
+  bufferStream.push(Buffer.from(fileData, 'base64')); // Décodage base64
+  bufferStream.push(null)
+
+  if (!folderId) {
+    folderId = await getFolderId();
+  }
+
+  // Stockage de la pièce jointe dans Google Drive
+  const fileMetadata = {
+    name: `${messageId}_${file.filename}`,
+    parents: [folderId]
+  };
+
+  const media = {
+    mimeType: 'application/octet-stream',
+    body: bufferStream,
+  };
+  
+  const response = await drive.files.create({
+    resource: fileMetadata,
+    media: media,
+    fields: 'id',
+  });
+
+  const fileId = response.data.id;
+  const fileLink = `https://drive.google.com/file/d/${fileId}/view?usp=sharing`;
+
+  logger.info(`Fichier ${fileLink} uploadé`)
+
+  return {url: fileLink, name: file.filename};
+}
+
 module.exports = {
   requestGoogleAuthorizationCode,
   getFormatedMails,
   markMailAsHandled,
+  pushFileToDrive
 };
