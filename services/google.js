@@ -313,6 +313,7 @@ async function getFolderId(userConfig) {
       q: `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
       fields: "files(id, name)",
       spaces: "drive",
+      supportsAllDrives: true,
     });
 
     const files = res.data.files;
@@ -325,6 +326,7 @@ async function getFolderId(userConfig) {
       const fileMetadata = {
         name: folderName,
         mimeType: "application/vnd.google-apps.folder",
+        supportsAllDrives: true
       };
 
       const folder = await drive.files.create({
@@ -383,6 +385,7 @@ async function pushFileToDrive(userConfig, messageId, file) {
   const fileMetadata = {
     name: `${messageId}_${file.filename}`,
     parents: [folderId],
+    supportsAllDrives: true,
   };
 
   const media = {
