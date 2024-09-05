@@ -2,13 +2,14 @@ const base64url = require("base64url");
 const { google } = require("googleapis");
 const environment = require("../env");
 const config = require("../config.json");
-const fs = require("fs");
-const envfile = require("envfile");
+const { writeFile } = require("node:fs/promises");
 const express = require("express");
 const { NodeHtmlMarkdown } = require("node-html-markdown");
 const moment = require("moment-timezone");
 const logger = require("../logger");
-const { Readable } = require('stream');
+const { Readable } = require("stream");
+const { readdir } = require("node:fs/promises");
+const path = require("path");
 
 var labelId;
 var folderId;
@@ -46,21 +47,37 @@ const oAuth2Client = new google.auth.OAuth2(
   environment.default.redirectUri,
 );
 
-async function saveGoogleTokens(code, token, refreshToken, expiry) {
-  const file = fs.readFileSync(".env");
+async function saveGoogleTokens(
+  userConfigPath,
+  code,
+  token,
+  refreshToken,
+  expiry,
+) {
+  let configPath = userConfigPath;
 
-  let parsedFile = envfile.parse(file);
+  if (!configPath) {
+    console.log("test");
+    configPath = await getNewConfigFilePath();
+    console.log("test");
+  }
 
-  parsedFile.CODE = code;
-  parsedFile.GOOGLE_API_TOKEN = token;
-  parsedFile.GOOGLE_API_REFRESH_TOKEN = refreshToken;
-  parsedFile.GOOGLE_API_TOKEN_EXPIRY = expiry;
-
-  fs.writeFileSync(".env", envfile.stringify(parsedFile));
+  await writeFile(
+    configPath,
+    JSON.stringify({
+      code,
+      google_api_token: token,
+      google_api_refresh_token: refreshToken,
+      google_api_token_expiry: expiry,
+    }),
+  );
 }
 
 function requestGoogleAuthorizationCode() {
-  const scopes = ["https://www.googleapis.com/auth/gmail.modify", "https://www.googleapis.com/auth/drive.file"];
+  const scopes = [
+    "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/drive.file",
+  ];
 
   const url = oAuth2Client.generateAuthUrl({
     // 'online' (default) or 'offline' (gets refresh_token)
@@ -77,7 +94,8 @@ function requestGoogleAuthorizationCode() {
 
     const { tokens } = await oAuth2Client.getToken(req.query);
 
-    saveGoogleTokens(
+    await saveGoogleTokens(
+      null,
       req.query.code,
       tokens.access_token,
       tokens.refresh_token,
@@ -97,13 +115,14 @@ function requestGoogleAuthorizationCode() {
   });
 }
 
-async function refreshAuthToken() {
+async function refreshAuthToken(userConfig) {
   const time = Math.floor(new Date().getTime() / 1000);
-  if (environment.default.googleApiTokenExpiry <= time) {
+  if (userConfig.config.google_api_token_expiry <= time) {
     const tokens = await oAuth2Client.refreshAccessToken();
 
-    saveGoogleTokens(
-      environment.default.code,
+    await saveGoogleTokens(
+      userConfig.path,
+      userConfig.config.code,
       tokens.access_token,
       tokens.refresh_token,
       tokens.expiry_date,
@@ -117,26 +136,26 @@ async function refreshAuthToken() {
   }
 }
 
-async function getGmailClient() {
+async function getGmailClient(userConfig) {
   oAuth2Client.setCredentials({
-    access_token: environment.default.googleApiToken,
-    refresh_token: environment.default.googleApiRefreshToken,
-    expiry_date: environment.default.googleApiTokenExpiry,
+    access_token: userConfig.config.google_api_token,
+    refresh_token: userConfig.config.google_api_refresh_token,
+    expiry_date: userConfig.config.google_api_token_expiry,
   });
 
-  await refreshAuthToken();
+  await refreshAuthToken(userConfig);
 
   return google.gmail({ version: "v1", auth: oAuth2Client });
 }
 
-async function getDriveClient() {
+async function getDriveClient(userConfig) {
   oAuth2Client.setCredentials({
-    access_token: environment.default.googleApiToken,
-    refresh_token: environment.default.googleApiRefreshToken,
-    expiry_date: environment.default.googleApiTokenExpiry,
+    access_token: userConfig.config.google_api_token,
+    refresh_token: userConfig.config.google_api_refresh_token,
+    expiry_date: userConfig.config.google_api_token_expiry,
   });
 
-  await refreshAuthToken();
+  await refreshAuthToken(userConfig);
 
   return google.drive({ version: "v3", auth: oAuth2Client });
 }
@@ -162,11 +181,11 @@ function buildGmailQuery() {
   return emailQuery;
 }
 
-async function getFormatedMails() {
+async function getFormatedMails(userConfig) {
   try {
-    const gmail = await getGmailClient();
+    const gmail = await getGmailClient(userConfig);
 
-    labelId = await getLabelId();
+    labelId = await getLabelId(userConfig);
 
     if (!labelId) {
       const label = await gmail.users.labels.create({
@@ -220,7 +239,9 @@ async function getFormatedMails() {
             body = base64url.decode(part.body.data);
           }
 
-          files = parts?.filter((part) => part.filename && part.body && part.body?.attachmentId);
+          files = parts?.filter(
+            (part) => part.filename && part.body && part.body?.attachmentId,
+          );
         } else {
           // Fallback to the main body if no parts are found
           body = msg.data.payload.body
@@ -237,7 +258,7 @@ async function getFormatedMails() {
         let client = isHandledEmailAddress(from, to);
 
         if (!client) {
-          client = 'ignored_client';
+          client = "ignored_client";
         }
 
         let emailsForClient = emailData.get(client);
@@ -267,8 +288,8 @@ async function getFormatedMails() {
   }
 }
 
-async function getLabelId() {
-  const gmail = await getGmailClient();
+async function getLabelId(userConfig) {
+  const gmail = await getGmailClient(userConfig);
 
   const labels = await gmail.users.labels.list({
     userId: "me",
@@ -281,17 +302,17 @@ async function getLabelId() {
   return botLabel?.id;
 }
 
-async function getFolderId() {
+async function getFolderId(userConfig) {
   try {
-    const folderName = 'gmailToNotion';
+    const folderName = "gmailToNotion";
 
-    const drive = await getDriveClient();
+    const drive = await getDriveClient(userConfig);
 
     // Recherche du dossier par son nom
     const res = await drive.files.list({
       q: `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-      fields: 'files(id, name)',
-      spaces: 'drive',
+      fields: "files(id, name)",
+      spaces: "drive",
     });
 
     const files = res.data.files;
@@ -303,24 +324,27 @@ async function getFolderId() {
       // Sinon, créer un nouveau dossier
       const fileMetadata = {
         name: folderName,
-        mimeType: 'application/vnd.google-apps.folder',
+        mimeType: "application/vnd.google-apps.folder",
       };
 
       const folder = await drive.files.create({
         resource: fileMetadata,
-        fields: 'id',
+        fields: "id",
       });
 
       logger.info(`Dossier créé avec l'ID: ${folder.data.id}`);
       return folder.data.id;
     }
   } catch (error) {
-    logger.error('Erreur lors de la recherche ou de la création du dossier:', error);
+    logger.error(
+      "Erreur lors de la recherche ou de la création du dossier:",
+      error,
+    );
   }
 }
 
-async function markMailAsHandled(email) {
-  const gmail = await getGmailClient();
+async function markMailAsHandled(userConfig, email) {
+  const gmail = await getGmailClient(userConfig);
 
   const response = await gmail.users.messages.modify({
     userId: "me",
@@ -335,9 +359,9 @@ async function markMailAsHandled(email) {
   return response;
 }
 
-async function pushFileToDrive(messageId, file) {
-  const gmail = await getGmailClient();
-  const drive = await getDriveClient();
+async function pushFileToDrive(userConfig, messageId, file) {
+  const gmail = await getGmailClient(userConfig);
+  const drive = await getDriveClient(userConfig);
 
   const attachment = await gmail.users.messages.attachments.get({
     userId: "me",
@@ -348,41 +372,53 @@ async function pushFileToDrive(messageId, file) {
   const fileData = attachment.data.data;
   const bufferStream = new Readable();
   bufferStream._read = () => {}; // No-op
-  bufferStream.push(Buffer.from(fileData, 'base64')); // Décodage base64
-  bufferStream.push(null)
+  bufferStream.push(Buffer.from(fileData, "base64")); // Décodage base64
+  bufferStream.push(null);
 
   if (!folderId) {
-    folderId = await getFolderId();
+    folderId = await getFolderId(userConfig);
   }
 
   // Stockage de la pièce jointe dans Google Drive
   const fileMetadata = {
     name: `${messageId}_${file.filename}`,
-    parents: [folderId]
+    parents: [folderId],
   };
 
   const media = {
-    mimeType: 'application/octet-stream',
+    mimeType: "application/octet-stream",
     body: bufferStream,
   };
-  
+
   const response = await drive.files.create({
     resource: fileMetadata,
     media: media,
-    fields: 'id',
+    fields: "id",
   });
 
   const fileId = response.data.id;
   const fileLink = `https://drive.google.com/file/d/${fileId}/view?usp=sharing`;
 
-  logger.info(`Fichier ${fileLink} uploadé`)
+  logger.info(`Fichier ${fileLink} uploadé`);
 
-  return {url: fileLink, name: file.filename};
+  return { url: fileLink, name: file.filename };
+}
+
+async function getNewConfigFilePath() {
+  console.log("testhei");
+  const fileList = await readdir("./users");
+  console.log("testhei2");
+  console.log(fileList);
+  const userConfigPaths = fileList.filter(
+    (file) => path.extname(file) === ".json",
+  );
+
+  return `./users/user_${userConfigPaths.length + 1}.json`;
 }
 
 module.exports = {
   requestGoogleAuthorizationCode,
   getFormatedMails,
   markMailAsHandled,
-  pushFileToDrive
+  pushFileToDrive,
 };

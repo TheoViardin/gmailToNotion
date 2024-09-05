@@ -2,3 +2,4 @@
 node_modules/*
 credentials.json
 *.log
+users/*.json

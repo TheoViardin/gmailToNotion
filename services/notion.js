@@ -2,7 +2,7 @@ const { Client } = require("@notionhq/client");
 const environment = require("../env");
 const moment = require("moment-timezone");
 const logger = require("../logger");
-const {pushFileToDrive} = require('./google');
+const { pushFileToDrive } = require("./google");
 
 const notion = new Client({ auth: environment.default.notionApiKey });
 
@@ -79,7 +79,7 @@ async function getPageFirstBlock(pageId) {
   return pageDetails.results[0];
 }
 
-async function addClientMails(existingClients, client, emails) {
+async function addClientMails(userConfig, existingClients, client, emails) {
   let clientDetails = getClientId(existingClients, client);
 
   let clientId = clientDetails?.id;
@@ -111,7 +111,7 @@ async function addClientMails(existingClients, client, emails) {
     const fileUrls = [];
 
     for (let file of email.files) {
-      const url = await pushFileToDrive(email.id, file);
+      const url = await pushFileToDrive(userConfig, email.id, file);
       fileUrls.push(url);
     }
 
@@ -197,15 +197,15 @@ async function addClientMails(existingClients, client, emails) {
                 })),
               },
             },
-            ...fileUrls.map(file => ({
+            ...fileUrls.map((file) => ({
               type: "file",
               file: {
                 type: "external",
                 external: {
-                  "url": file.url
+                  url: file.url,
                 },
-                name: file.name
-              }
+                name: file.name,
+              },
             })),
           ],
         },
@@ -229,15 +229,15 @@ async function addClientMails(existingClients, client, emails) {
                 })),
               },
             },
-            ...fileUrls.map(file => ({
+            ...fileUrls.map((file) => ({
               type: "file",
               file: {
                 type: "external",
                 external: {
-                  "url": file.url
+                  url: file.url,
                 },
-                name: file.name
-              }
+                name: file.name,
+              },
             })),
           ],
         },

@@ -5,7 +5,9 @@
   "scripts": {
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "prettier": "prettier . --write"
+    "prettier": "prettier . --write",
+    "importMails": "node index.js importMails",
+    "addUser": "node index.js addUser"
   },
   "author": "",
   "license": "ISC",
@@ -14,7 +16,6 @@
     "@notionhq/client": "^2.2.15",
     "base64url": "^3.0.1",
     "dotenv": "^16.4.5",
-    "envfile": "^7.1.0",
     "express": "^4.19.2",
     "googleapis": "^140.0.1",
     "moment-timezone": "^0.5.45",

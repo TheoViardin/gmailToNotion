@@ -15,10 +15,12 @@ process.on("uncaughtException", (err) => {
 });
 
 async function main() {
-  if (!process.env.CODE) {
-    requestGoogleAuthorizationCode();
-  } else {
-    await importMailsIntoNotion();
+  switch (process.argv[2]) {
+    case "addUser":
+      requestGoogleAuthorizationCode();
+      break;
+    case "importMails":
+      await importMailsIntoNotion();
   }
 }
 
