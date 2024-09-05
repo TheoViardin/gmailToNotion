@@ -51,10 +51,12 @@ async function getExistingClients() {
     environment.default.mainNotionPage,
   );
 
-  const existingClients = mainPageContent.results.map((block) => ({
-    id: block.id,
-    name: block.child_page.title,
-  }));
+  const existingClients = mainPageContent.results
+    .filter((block) => block.child_page?.title)
+    .map((block) => ({
+      id: block.id,
+      name: block.child_page.title,
+    }));
 
   return existingClients || [];
 }
@@ -80,7 +82,11 @@ async function getPageFirstBlock(pageId) {
 }
 
 async function addClientMails(userConfig, existingClients, client, emails) {
+  console.log("clientDetails")
   let clientDetails = getClientId(existingClients, client);
+
+  console.log("clientDetails")
+  console.log(clientDetails)
 
   let clientId = clientDetails?.id;
 

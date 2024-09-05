@@ -29,8 +29,8 @@ function isHandledEmailAddress(fromEmailAddress, toEmailAddress) {
   for (let client of config.clients) {
     for (let handledEmailAddress of client.emailAddresses) {
       if (
-        fromEmailAddress.includes(handledEmailAddress) ||
-        toEmailAddress.includes(handledEmailAddress)
+        fromEmailAddress.includes(handledEmailAddress.trim()) ||
+        toEmailAddress.includes(handledEmailAddress.trim())
       ) {
         return client.name;
       }
@@ -57,9 +57,7 @@ async function saveGoogleTokens(
   let configPath = userConfigPath;
 
   if (!configPath) {
-    console.log("test");
     configPath = await getNewConfigFilePath();
-    console.log("test");
   }
 
   await writeFile(
@@ -230,10 +228,14 @@ async function getFormatedMails(userConfig) {
         let body = "";
         let files = [];
         const parts = msg.data.payload.parts;
-
         // Find the body in the payload parts (usually plain text or HTML)
         if (parts && parts.length > 0) {
-          const part = parts.find((part) => part.mimeType === "text/html");
+          let part = parts.find((part) => part.mimeType === "text/html");
+
+          if (!part) {
+            const alternativePart = parts.find((part) => part.mimeType === "multipart/alternative");
+            part = alternativePart.parts.find((part) => part.mimeType === "text/html");
+          }
 
           if (part && part.body && part.body.data) {
             body = base64url.decode(part.body.data);
@@ -250,6 +252,10 @@ async function getFormatedMails(userConfig) {
         }
 
         body = NodeHtmlMarkdown.translate(body);
+
+        body = body
+          .replaceAll(/(?:!\[([^\]]*)\]\(([^)]+)\))|(?:\[(!?\[.*?\]\([^)]+\))\]\(([^)]+)\))/g, "")
+          .replaceAll(/(\r?\n){2,}/g, "\n")
 
         /*body = htmlToText(body, {
           wordwrap: false, // Preserve the original formatting without wrapping text
@@ -408,10 +414,8 @@ async function pushFileToDrive(userConfig, messageId, file) {
 }
 
 async function getNewConfigFilePath() {
-  console.log("testhei");
   const fileList = await readdir("./users");
-  console.log("testhei2");
-  console.log(fileList);
+  
   const userConfigPaths = fileList.filter(
     (file) => path.extname(file) === ".json",
   );
