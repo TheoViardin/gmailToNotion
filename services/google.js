@@ -233,8 +233,12 @@ async function getFormatedMails(userConfig) {
           let part = parts.find((part) => part.mimeType === "text/html");
 
           if (!part) {
-            const alternativePart = parts.find((part) => part.mimeType === "multipart/alternative");
-            part = alternativePart.parts.find((part) => part.mimeType === "text/html");
+            const alternativePart = parts.find(
+              (part) => part.mimeType === "multipart/alternative",
+            );
+            part = alternativePart.parts.find(
+              (part) => part.mimeType === "text/html",
+            );
           }
 
           if (part && part.body && part.body.data) {
@@ -254,8 +258,11 @@ async function getFormatedMails(userConfig) {
         body = NodeHtmlMarkdown.translate(body);
 
         body = body
-          .replaceAll(/(?:!\[([^\]]*)\]\(([^)]+)\))|(?:\[(!?\[.*?\]\([^)]+\))\]\(([^)]+)\))/g, "")
-          .replaceAll(/(\r?\n){2,}/g, "\n")
+          .replaceAll(
+            /(?:!\[([^\]]*)\]\(([^)]+)\))|(?:\[(!?\[.*?\]\([^)]+\))\]\(([^)]+)\))/g,
+            "",
+          )
+          .replaceAll(/(\r?\n){2,}/g, "\n");
 
         /*body = htmlToText(body, {
           wordwrap: false, // Preserve the original formatting without wrapping text
@@ -301,9 +308,7 @@ async function getLabelId(userConfig) {
     userId: "me",
   });
 
-  const botLabel = labels.data.labels.find(
-    (label) => label.name === "gtn",
-  );
+  const botLabel = labels.data.labels.find((label) => label.name === "gtn");
 
   return botLabel?.id;
 }
@@ -332,7 +337,7 @@ async function getFolderId(userConfig) {
       const fileMetadata = {
         name: folderName,
         mimeType: "application/vnd.google-apps.folder",
-        supportsAllDrives: true
+        supportsAllDrives: true,
       };
 
       const folder = await drive.files.create({
@@ -415,7 +420,7 @@ async function pushFileToDrive(userConfig, messageId, file) {
 
 async function getNewConfigFilePath() {
   const fileList = await readdir("./users");
-  
+
   const userConfigPaths = fileList.filter(
     (file) => path.extname(file) === ".json",
   );

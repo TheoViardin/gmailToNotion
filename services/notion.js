@@ -82,11 +82,7 @@ async function getPageFirstBlock(pageId) {
 }
 
 async function addClientMails(userConfig, existingClients, client, emails) {
-  console.log("clientDetails")
   let clientDetails = getClientId(existingClients, client);
-
-  console.log("clientDetails")
-  console.log(clientDetails)
 
   let clientId = clientDetails?.id;
 
