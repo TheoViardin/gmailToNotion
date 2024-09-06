@@ -172,7 +172,7 @@ function buildGmailQuery() {
     toEmailQuery = `{to:${toEmailQuery}}`;
   }
 
-  const emailQuery = `${fromEmailQuery} OR ${toEmailQuery} NOT label:importedInNotion`;
+  const emailQuery = `${fromEmailQuery} OR ${toEmailQuery} NOT label:gtn`;
 
   logger.info(emailQuery);
 
@@ -189,7 +189,7 @@ async function getFormatedMails(userConfig) {
       const label = await gmail.users.labels.create({
         userId: "me",
         requestBody: {
-          name: "importedInNotion",
+          name: "gtn",
           messageListVisibility: "show",
           labelListVisibility: "labelShow",
         },
@@ -302,7 +302,7 @@ async function getLabelId(userConfig) {
   });
 
   const botLabel = labels.data.labels.find(
-    (label) => label.name === "importedInNotion",
+    (label) => label.name === "gtn",
   );
 
   return botLabel?.id;
