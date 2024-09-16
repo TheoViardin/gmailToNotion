@@ -14,6 +14,9 @@ process.on("uncaughtException", (err) => {
   process.exit(1);
 });
 
+/**
+ * Main handler
+ */
 async function main() {
   switch (process.argv[2]) {
     case "addUser":

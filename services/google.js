@@ -14,6 +14,17 @@ const path = require("path");
 var labelId;
 var folderId;
 
+// Set up OAuth2 client with credentials from environment variables
+const oAuth2Client = new google.auth.OAuth2(
+  environment.default.clientId,
+  environment.default.clientSecret,
+  environment.default.redirectUri,
+);
+
+/**
+ * Retrieves list of handled email addresses
+ * @returns {array}
+ */
 function getHandledEmailAddresses() {
   const handledEmailAddresses = [];
   for (let client of config.clients) {
@@ -25,6 +36,12 @@ function getHandledEmailAddresses() {
   return handledEmailAddresses;
 }
 
+/**
+ * Checks if the origin email address of the destination email address are handled by the app and returns the corresponding client name
+ * @param {string} fromEmailAddress 
+ * @param {string} toEmailAddress 
+ * @returns {string}
+ */
 function isHandledEmailAddress(fromEmailAddress, toEmailAddress) {
   for (let client of config.clients) {
     for (let handledEmailAddress of client.emailAddresses) {
@@ -40,13 +57,14 @@ function isHandledEmailAddress(fromEmailAddress, toEmailAddress) {
   return null;
 }
 
-// Set up OAuth2 client with credentials from environment variables
-const oAuth2Client = new google.auth.OAuth2(
-  environment.default.clientId,
-  environment.default.clientSecret,
-  environment.default.redirectUri,
-);
-
+/**
+ * Save the newly generate user authentication data to his file
+ * @param {string} userConfigPath
+ * @param {string} code 
+ * @param {string} token 
+ * @param {string} refreshToken 
+ * @param {number} expiry 
+ */
 async function saveGoogleTokens(
   userConfigPath,
   code,
@@ -71,6 +89,10 @@ async function saveGoogleTokens(
   );
 }
 
+/**
+ * Generate link to let user allow access for the script to his google account
+ * Launches a temporary express server which will handle the google response once the user accepts the terms
+ */
 function requestGoogleAuthorizationCode() {
   const scopes = [
     "https://www.googleapis.com/auth/gmail.modify",
@@ -113,6 +135,10 @@ function requestGoogleAuthorizationCode() {
   });
 }
 
+/**
+ * Checks wether user credentials are still up to date or triggers theirs renewal
+ * @param {object} userConfig 
+ */
 async function refreshAuthToken(userConfig) {
   const time = Math.floor(new Date().getTime() / 1000);
   if (userConfig.config.google_api_token_expiry <= time) {
@@ -134,6 +160,11 @@ async function refreshAuthToken(userConfig) {
   }
 }
 
+/**
+ * Generates a gmail client object to be used for all gmail api calls
+ * @param {object} userConfig 
+ * @returns {google_v1.Gmail}
+ */
 async function getGmailClient(userConfig) {
   oAuth2Client.setCredentials({
     access_token: userConfig.config.google_api_token,
@@ -146,6 +177,11 @@ async function getGmailClient(userConfig) {
   return google.gmail({ version: "v1", auth: oAuth2Client });
 }
 
+/**
+ * Generates a google drive client object to be used for all gmail api calls
+ * @param {object} userConfig 
+ * @returns {google_v3.Drive}
+ */
 async function getDriveClient(userConfig) {
   oAuth2Client.setCredentials({
     access_token: userConfig.config.google_api_token,
@@ -158,6 +194,12 @@ async function getDriveClient(userConfig) {
   return google.drive({ version: "v3", auth: oAuth2Client });
 }
 
+/**
+ * Returns a gmail ready query
+ * The query gets all mail with source or destination of one of the email address configured,
+ * without the label gtn
+ * @returns {string}
+ */
 function buildGmailQuery() {
   const handledEmailAddresses = getHandledEmailAddresses();
 
@@ -179,6 +221,11 @@ function buildGmailQuery() {
   return emailQuery;
 }
 
+/**
+ * Retrieves emails and formates their content to be used later
+ * @param {object} userConfig 
+ * @returns {object}
+ */
 async function getFormatedMails(userConfig) {
   try {
     const gmail = await getGmailClient(userConfig);
@@ -301,6 +348,11 @@ async function getFormatedMails(userConfig) {
   }
 }
 
+/**
+ * Returns the gmail internal ID of the label "gtn"
+ * @param {object} userConfig 
+ * @returns string
+ */
 async function getLabelId(userConfig) {
   const gmail = await getGmailClient(userConfig);
 
@@ -313,6 +365,11 @@ async function getLabelId(userConfig) {
   return botLabel?.id;
 }
 
+/**
+ * Returns the google drive internal ID of the "googleToNotion" directory
+ * @param {object} userConfig 
+ * @returns {string}
+ */
 async function getFolderId(userConfig) {
   try {
     const folderName = "gmailToNotion";
@@ -356,6 +413,12 @@ async function getFolderId(userConfig) {
   }
 }
 
+/**
+ * Adds the label "gtn" to the email
+ * @param {object} userConfig 
+ * @param {object} email 
+ * @returns {object}
+ */
 async function markMailAsHandled(userConfig, email) {
   const gmail = await getGmailClient(userConfig);
 
@@ -372,6 +435,13 @@ async function markMailAsHandled(userConfig, email) {
   return response;
 }
 
+/**
+ * Pushes a file to the write directory in google drive and returns its url and name
+ * @param {object} userConfig 
+ * @param {string} messageId 
+ * @param {object} file 
+ * @returns {object} object containing the url and name of the uploaded file
+ */
 async function pushFileToDrive(userConfig, messageId, file) {
   const gmail = await getGmailClient(userConfig);
   const drive = await getDriveClient(userConfig);
@@ -418,6 +488,10 @@ async function pushFileToDrive(userConfig, messageId, file) {
   return { url: fileLink, name: file.filename };
 }
 
+/**
+ * Returns the path of a new user config file
+ * @returns {string}
+ */
 async function getNewConfigFilePath() {
   const fileList = await readdir("./users");
 

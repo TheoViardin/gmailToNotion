@@ -6,10 +6,21 @@ const { pushFileToDrive } = require("./google");
 
 const notion = new Client({ auth: environment.default.notionApiKey });
 
+/**
+ * Returns the content of the specified page
+ * @param {number} pageId 
+ * @param {number} count 
+ * @returns {object}
+ */
 function getPageContent(pageId, count = 100) {
   return notion.blocks.children.list({ block_id: pageId, page_size: count });
 }
 
+/**
+ * Creates and returns a notion page with the specified name
+ * @param {string} name 
+ * @returns {object}
+ */
 async function createPage(name) {
   const page = await notion.pages.create({
     parent: { page_id: environment.default.mainNotionPage },
@@ -46,6 +57,10 @@ async function createPage(name) {
   return page;
 }
 
+/**
+ * Returns the existing client from the main notion page
+ * @returns {array}
+ */
 async function getExistingClients() {
   const mainPageContent = await getPageContent(
     environment.default.mainNotionPage,
@@ -61,6 +76,11 @@ async function getExistingClients() {
   return existingClients || [];
 }
 
+/**
+ * Cleans an email address for it to respect the email address format
+ * @param {string} emailAddress 
+ * @returns {string}
+ */
 function cleanEmailAddresses(emailAddress) {
   const emailRegex = /[\w.-]+@[\w.-]+\.[a-zA-Z]{2,}/g;
 
@@ -69,18 +89,36 @@ function cleanEmailAddresses(emailAddress) {
   return [...new Set(emailAddresses)];
 }
 
+/**
+ * Returns the id of the searched user
+ * @param {array} existingClients 
+ * @param {string} clientName 
+ * @returns {string}
+ */
 function getClientId(existingClients, clientName) {
   return existingClients.find(
     (existingClient) => existingClient.name === clientName,
   );
 }
 
+/**
+ * Return the first element of a notion page
+ * @param {string} pageId 
+ * @returns {object}
+ */
 async function getPageFirstBlock(pageId) {
   const pageDetails = await getPageContent(pageId, 1);
 
   return pageDetails.results[0];
 }
 
+/**
+ * Adds mail from gmail to notion
+ * @param {object} userConfig 
+ * @param {array} existingClients 
+ * @param {string} client 
+ * @param {array} emails 
+ */
 async function addClientMails(userConfig, existingClients, client, emails) {
   let clientDetails = getClientId(existingClients, client);
 

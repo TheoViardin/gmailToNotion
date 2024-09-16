@@ -4,6 +4,9 @@ const logger = require("../logger");
 const { readdir, readFile } = require("node:fs/promises");
 const path = require("path");
 
+/**
+ * Retrieves users emails, imports them in notion and flag them as imported
+ */
 async function importMailsIntoNotion() {
   const userConfigs = await getUserConfigs();
 
@@ -48,6 +51,10 @@ async function importMailsIntoNotion() {
   logger.info("Execution terminée");
 }
 
+/**
+ * Returns an array of all the existing users
+ * @returns {array}
+ */
 async function getUserConfigs() {
   const fileList = await readdir("./users");
   const userConfigPaths = fileList.filter(
