@@ -11,4 +11,7 @@ module.exports.default = {
   googleApiTokenExpiry: process.env.GOOGLE_API_TOKEN_EXPIRY,
   notionApiKey: process.env.NOTION_API_KEY,
   mainNotionPage: process.env.MAIN_NOTION_PAGE,
+  gmailLabel: process.env.GMAIL_LABEL,
+  driveDirectoryName: process.env.DRIVE_DIRECTORY_NAME,
+  clientDomain: process.env.CLIENT_DOMAIN,
 };

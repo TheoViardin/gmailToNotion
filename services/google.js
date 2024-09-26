@@ -38,11 +38,19 @@ function getHandledEmailAddresses() {
 
 /**
  * Checks if the origin email address of the destination email address are handled by the app and returns the corresponding client name
- * @param {string} fromEmailAddress 
- * @param {string} toEmailAddress 
+ * @param {string} fromEmailAddress
+ * @param {string} toEmailAddress
  * @returns {string}
  */
-function isHandledEmailAddress(fromEmailAddress, toEmailAddress) {
+function isHandledMail(userEmailAddress, fromEmailAddress, toEmailAddress, cc) {
+  if (
+    cc == userEmailAddress &&
+    (fromEmailAddress.contains(`@${environment.default.clientDomain}`) || toEmailAddress.contains(`@${environment.default.clientDomain}`))
+  ) {
+    // If the user is in copie and another yellodit user is already in the from or to, don't import, it will be importer for another user
+    return null;
+  }
+
   for (let client of config.clients) {
     for (let handledEmailAddress of client.emailAddresses) {
       if (
@@ -60,10 +68,10 @@ function isHandledEmailAddress(fromEmailAddress, toEmailAddress) {
 /**
  * Save the newly generate user authentication data to his file
  * @param {string} userConfigPath
- * @param {string} code 
- * @param {string} token 
- * @param {string} refreshToken 
- * @param {number} expiry 
+ * @param {string} code
+ * @param {string} token
+ * @param {string} refreshToken
+ * @param {number} expiry
  */
 async function saveGoogleTokens(
   userConfigPath,
@@ -97,6 +105,7 @@ function requestGoogleAuthorizationCode() {
   const scopes = [
     "https://www.googleapis.com/auth/gmail.modify",
     "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/userinfo.email",
   ];
 
   const url = oAuth2Client.generateAuthUrl({
@@ -137,7 +146,7 @@ function requestGoogleAuthorizationCode() {
 
 /**
  * Checks wether user credentials are still up to date or triggers theirs renewal
- * @param {object} userConfig 
+ * @param {object} userConfig
  */
 async function refreshAuthToken(userConfig) {
   const time = Math.floor(new Date().getTime() / 1000);
@@ -162,7 +171,7 @@ async function refreshAuthToken(userConfig) {
 
 /**
  * Generates a gmail client object to be used for all gmail api calls
- * @param {object} userConfig 
+ * @param {object} userConfig
  * @returns {google_v1.Gmail}
  */
 async function getGmailClient(userConfig) {
@@ -179,7 +188,7 @@ async function getGmailClient(userConfig) {
 
 /**
  * Generates a google drive client object to be used for all gmail api calls
- * @param {object} userConfig 
+ * @param {object} userConfig
  * @returns {google_v3.Drive}
  */
 async function getDriveClient(userConfig) {
@@ -195,16 +204,42 @@ async function getDriveClient(userConfig) {
 }
 
 /**
+ * Generates a google oauth client object to be used for all auth api calls
+ * @param {object} userConfig
+ * @returns {google_v3.Drive}
+ */
+async function getOAuthClient(userConfig) {
+  oAuth2Client.setCredentials({
+    access_token: userConfig.config.google_api_token,
+    refresh_token: userConfig.config.google_api_refresh_token,
+    expiry_date: userConfig.config.google_api_token_expiry,
+  });
+
+  await refreshAuthToken(userConfig);
+
+  return google.oauth2({
+    auth: oAuth2Client,
+    version: "v2",
+  });
+}
+
+async function getUserEmailAddress(userConfig) {
+  const oauthClient = await getOAuthClient(userConfig);
+
+  const res = await oauthClient.userinfo.get();
+
+  return res.data.email;
+}
+
+/**
  * Returns a gmail ready query
  * The query gets all mail with source or destination of one of the email address configured,
  * without the label gtn
  * @returns {string}
  */
-function buildGmailQuery() {
-  const handledEmailAddresses = getHandledEmailAddresses();
-
-  let fromEmailQuery = handledEmailAddresses.join(" from:");
-  let toEmailQuery = handledEmailAddresses.join(" to:");
+function buildGmailQuery(emails) {
+  let fromEmailQuery = emails.join(" from:");
+  let toEmailQuery = emails.join(" to:");
 
   if (fromEmailQuery) {
     fromEmailQuery = `{from:${fromEmailQuery}}`;
@@ -214,16 +249,52 @@ function buildGmailQuery() {
     toEmailQuery = `{to:${toEmailQuery}}`;
   }
 
-  const emailQuery = `${fromEmailQuery} OR ${toEmailQuery} NOT label:gtn`;
+  const emailQuery = `${fromEmailQuery} OR ${toEmailQuery} NOT label:${environment.default.gmailLabel}`;
 
   logger.info(emailQuery);
 
   return emailQuery;
 }
 
+function splitArrayIntoChunks(arr, chunkSize = 10) {
+  let result = [];
+  for (let i = 0; i < arr.length; i += chunkSize) {
+    result.push(arr.slice(i, i + chunkSize));
+  }
+  return result;
+}
+
+async function getMessages(userConfig) {
+  const gmail = await getGmailClient(userConfig);
+
+  const handledEmailAddresses = getHandledEmailAddresses();
+
+  const splitedEmailAddresses = splitArrayIntoChunks(
+    handledEmailAddresses,
+    200,
+  );
+
+  const promises = splitedEmailAddresses.map(async (chunk) =>
+    gmail.users.messages.list({
+      userId: "me",
+      maxResults: 10, // Number of emails to retrieve
+      q: buildGmailQuery(chunk),
+    }),
+  );
+
+  const rawResponses = await Promise.all(promises);
+
+  let responses = [];
+  rawResponses.forEach((response) =>
+    responses.push(...(response.data.messages ? response.data.messages : [])),
+  );
+
+  return responses;
+}
+
 /**
  * Retrieves emails and formates their content to be used later
- * @param {object} userConfig 
+ * @param {object} userConfig
  * @returns {object}
  */
 async function getFormatedMails(userConfig) {
@@ -245,13 +316,7 @@ async function getFormatedMails(userConfig) {
       labelId = label.data.id;
     }
 
-    const response = await gmail.users.messages.list({
-      userId: "me",
-      maxResults: 10, // Number of emails to retrieve
-      q: buildGmailQuery(),
-    });
-
-    const messages = response.data.messages;
+    const messages = await getMessages(userConfig);
 
     const emailData = new Map();
 
@@ -269,6 +334,7 @@ async function getFormatedMails(userConfig) {
         ).value;
         const from = headers.find((header) => header.name === "From").value;
         const to = headers.find((header) => header.name === "To").value;
+        const cc = headers.find((header) => header.name === "CC")?.value;
         const date = moment.unix(msg.data.internalDate / 1000).utc();
 
         // Extract the body of the email
@@ -280,8 +346,10 @@ async function getFormatedMails(userConfig) {
           let part = parts.find((part) => part.mimeType === "text/html");
 
           if (!part) {
-            const alternativePart = parts.find(
-              (part) => part.mimeType === "multipart/alternative",
+            const alternativePart = parts.find((part) =>
+              ["multipart/alternative", "multipart/related"].includes(
+                part.mimeType,
+              ),
             );
             part = alternativePart.parts.find(
               (part) => part.mimeType === "text/html",
@@ -315,10 +383,12 @@ async function getFormatedMails(userConfig) {
           wordwrap: false, // Preserve the original formatting without wrapping text
         });*/
 
-        let client = isHandledEmailAddress(from, to);
+        const userEmailAddress = await getUserEmailAddress(userConfig);
+
+        let client = isHandledMail(userEmailAddress, from, to, cc);
 
         if (!client) {
-          client = "ignored_client";
+          client = "ignored";
         }
 
         let emailsForClient = emailData.get(client);
@@ -350,7 +420,7 @@ async function getFormatedMails(userConfig) {
 
 /**
  * Returns the gmail internal ID of the label "gtn"
- * @param {object} userConfig 
+ * @param {object} userConfig
  * @returns string
  */
 async function getLabelId(userConfig) {
@@ -367,18 +437,16 @@ async function getLabelId(userConfig) {
 
 /**
  * Returns the google drive internal ID of the "googleToNotion" directory
- * @param {object} userConfig 
+ * @param {object} userConfig
  * @returns {string}
  */
 async function getFolderId(userConfig) {
   try {
-    const folderName = "gmailToNotion";
-
     const drive = await getDriveClient(userConfig);
 
     // Recherche du dossier par son nom
     const res = await drive.files.list({
-      q: `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      q: `name='${environment.default.driveDirectoryName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
       fields: "files(id, name)",
       spaces: "drive",
       supportsAllDrives: true,
@@ -392,7 +460,7 @@ async function getFolderId(userConfig) {
     } else {
       // Sinon, créer un nouveau dossier
       const fileMetadata = {
-        name: folderName,
+        name: environment.default.driveDirectoryName,
         mimeType: "application/vnd.google-apps.folder",
         supportsAllDrives: true,
       };
@@ -415,8 +483,8 @@ async function getFolderId(userConfig) {
 
 /**
  * Adds the label "gtn" to the email
- * @param {object} userConfig 
- * @param {object} email 
+ * @param {object} userConfig
+ * @param {object} email
  * @returns {object}
  */
 async function markMailAsHandled(userConfig, email) {
@@ -437,9 +505,9 @@ async function markMailAsHandled(userConfig, email) {
 
 /**
  * Pushes a file to the write directory in google drive and returns its url and name
- * @param {object} userConfig 
- * @param {string} messageId 
- * @param {object} file 
+ * @param {object} userConfig
+ * @param {string} messageId
+ * @param {object} file
  * @returns {object} object containing the url and name of the uploaded file
  */
 async function pushFileToDrive(userConfig, messageId, file) {

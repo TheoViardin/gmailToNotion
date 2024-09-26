@@ -27,7 +27,7 @@ async function importMailsIntoNotion() {
       const existingClients = await getExistingClients();
 
       for (let [client, clientMails] of mails) {
-        if (client === "ignored_client") {
+        if (client === "ignored") {
           logger.info(`"${clientMails.length}" ignoré(s)`);
         } else {
           await addClientMails(

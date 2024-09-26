@@ -8,8 +8,8 @@ const notion = new Client({ auth: environment.default.notionApiKey });
 
 /**
  * Returns the content of the specified page
- * @param {number} pageId 
- * @param {number} count 
+ * @param {number} pageId
+ * @param {number} count
  * @returns {object}
  */
 function getPageContent(pageId, count = 100) {
@@ -18,7 +18,7 @@ function getPageContent(pageId, count = 100) {
 
 /**
  * Creates and returns a notion page with the specified name
- * @param {string} name 
+ * @param {string} name
  * @returns {object}
  */
 async function createPage(name) {
@@ -78,7 +78,7 @@ async function getExistingClients() {
 
 /**
  * Cleans an email address for it to respect the email address format
- * @param {string} emailAddress 
+ * @param {string} emailAddress
  * @returns {string}
  */
 function cleanEmailAddresses(emailAddress) {
@@ -91,8 +91,8 @@ function cleanEmailAddresses(emailAddress) {
 
 /**
  * Returns the id of the searched user
- * @param {array} existingClients 
- * @param {string} clientName 
+ * @param {array} existingClients
+ * @param {string} clientName
  * @returns {string}
  */
 function getClientId(existingClients, clientName) {
@@ -103,7 +103,7 @@ function getClientId(existingClients, clientName) {
 
 /**
  * Return the first element of a notion page
- * @param {string} pageId 
+ * @param {string} pageId
  * @returns {object}
  */
 async function getPageFirstBlock(pageId) {
@@ -114,10 +114,10 @@ async function getPageFirstBlock(pageId) {
 
 /**
  * Adds mail from gmail to notion
- * @param {object} userConfig 
- * @param {array} existingClients 
- * @param {string} client 
- * @param {array} emails 
+ * @param {object} userConfig
+ * @param {array} existingClients
+ * @param {string} client
+ * @param {array} emails
  */
 async function addClientMails(userConfig, existingClients, client, emails) {
   let clientDetails = getClientId(existingClients, client);
