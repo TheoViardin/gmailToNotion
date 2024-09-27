@@ -45,7 +45,8 @@ function getHandledEmailAddresses() {
 function isHandledMail(userEmailAddress, fromEmailAddress, toEmailAddress, cc) {
   if (
     cc == userEmailAddress &&
-    (fromEmailAddress.contains(`@${environment.default.clientDomain}`) || toEmailAddress.contains(`@${environment.default.clientDomain}`))
+    (fromEmailAddress.contains(`@${environment.default.clientDomain}`) ||
+      toEmailAddress.contains(`@${environment.default.clientDomain}`))
   ) {
     // If the user is in copie and another yellodit user is already in the from or to, don't import, it will be importer for another user
     return null;
@@ -104,7 +105,7 @@ async function saveGoogleTokens(
 function requestGoogleAuthorizationCode() {
   const scopes = [
     "https://www.googleapis.com/auth/gmail.modify",
-    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/userinfo.email",
   ];
 
@@ -351,7 +352,8 @@ async function getFormatedMails(userConfig) {
                 part.mimeType,
               ),
             );
-            part = alternativePart.parts.find(
+
+            part = alternativePart?.parts.find(
               (part) => part.mimeType === "text/html",
             );
           }
@@ -446,10 +448,10 @@ async function getFolderId(userConfig) {
 
     // Recherche du dossier par son nom
     const res = await drive.files.list({
-      q: `name='${environment.default.driveDirectoryName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-      fields: "files(id, name)",
-      spaces: "drive",
+      q: `name='${environment.default.driveDirectoryName}' and mimeType='application/vnd.google-apps.folder' and '${environment.default.driveFolderId}' in parents and trashed=false`,
       supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+      fields: "files(id, name)",
     });
 
     const files = res.data.files;
@@ -462,11 +464,12 @@ async function getFolderId(userConfig) {
       const fileMetadata = {
         name: environment.default.driveDirectoryName,
         mimeType: "application/vnd.google-apps.folder",
-        supportsAllDrives: true,
+        parents: [environment.default.driveFolderId],
       };
 
       const folder = await drive.files.create({
         resource: fileMetadata,
+        supportsAllDrives: true,
         fields: "id",
       });
 
@@ -478,6 +481,7 @@ async function getFolderId(userConfig) {
       "Erreur lors de la recherche ou de la création du dossier:",
       error,
     );
+    throw error;
   }
 }
 
@@ -534,7 +538,6 @@ async function pushFileToDrive(userConfig, messageId, file) {
   const fileMetadata = {
     name: `${messageId}_${file.filename}`,
     parents: [folderId],
-    supportsAllDrives: true,
   };
 
   const media = {
@@ -544,6 +547,7 @@ async function pushFileToDrive(userConfig, messageId, file) {
 
   const response = await drive.files.create({
     resource: fileMetadata,
+    supportsAllDrives: true,
     media: media,
     fields: "id",
   });

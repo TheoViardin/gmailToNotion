@@ -14,4 +14,5 @@ module.exports.default = {
   gmailLabel: process.env.GMAIL_LABEL,
   driveDirectoryName: process.env.DRIVE_DIRECTORY_NAME,
   clientDomain: process.env.CLIENT_DOMAIN,
+  driveFolderId: process.env.DRIVE_FOLDER_ID,
 };
