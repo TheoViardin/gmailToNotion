@@ -160,10 +160,12 @@ async function addClientMails(userConfig, existingClients, client, emails) {
       chunks.push(email.body.slice(i, i + 2000));
     }
 
+    const hasFiles = Boolean(fileUrls.length);
+
     const object = {
       type: "text",
       text: {
-        content: `Objet : ${email.subject}\n${email.date.tz("Europe/Paris").format("DD/MM/YY à HH:mm")} - De : `,
+        content: `Objet : ${email.subject}\n${hasFiles ? "🔗 " : ""}${email.date.tz("Europe/Paris").format("DD/MM/YY à HH:mm")} - De : `,
       },
       annotations: {
         bold: true,
