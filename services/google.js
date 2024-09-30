@@ -332,7 +332,7 @@ async function getFormatedMails(userConfig) {
 
         const subject = headers.find(
           (header) => header.name === "Subject",
-        ).value;
+        )?.value;
         const from = headers.find((header) => header.name === "From").value;
         const to = headers.find((header) => header.name === "To").value;
         const cc = headers.find((header) => header.name === "CC")?.value;
