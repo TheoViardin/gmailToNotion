@@ -244,7 +244,7 @@ async function addClientMails(userConfig, existingClients, client, emails) {
                 external: {
                   url: file.url,
                 },
-                name: file.name,
+                name: file.name.substring(0, 99),
               },
             })),
           ],
