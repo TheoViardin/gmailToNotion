@@ -333,9 +333,9 @@ async function getFormatedMails(userConfig) {
         const subject = headers.find(
           (header) => header.name === "Subject",
         )?.value;
-        const from = headers.find((header) => header.name === "From").value;
-        const to = headers.find((header) => header.name === "To").value;
-        const cc = headers.find((header) => header.name === "CC")?.value;
+        const from = headers.find((header) => header.name === "From")?.value ?? "";
+        const to = headers.find((header) => header.name === "To")?.value ?? "";
+        const cc = headers.find((header) => header.name === "CC")?.value ?? "";
         const date = moment.unix(msg.data.internalDate / 1000).utc();
 
         // Extract the body of the email
