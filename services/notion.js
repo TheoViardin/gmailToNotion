@@ -12,8 +12,26 @@ const notion = new Client({ auth: environment.default.notionApiKey });
  * @param {number} count
  * @returns {object}
  */
-function getPageContent(pageId, count = 100) {
-  return notion.blocks.children.list({ block_id: pageId, page_size: count });
+async function getPageContent(pageId, count) {
+  let hasMore = true;
+  let nextCursor = undefined;
+
+  const content = [];
+
+  while (hasMore && (count ? count > content.length : true)) {
+    const blockList = await notion.blocks.children.list({
+      block_id: pageId,
+      page_size: count ? count - content.length : 100,
+      start_cursor: nextCursor,
+    });
+
+    nextCursor = blockList.next_cursor;
+    hasMore = blockList.has_more;
+
+    content.push(...blockList.results);
+  }
+
+  return content;
 }
 
 /**
@@ -64,14 +82,17 @@ async function createPage(name) {
 async function getExistingClients() {
   const mainPageContent = await getPageContent(
     environment.default.mainNotionPage,
+    null,
   );
 
-  const existingClients = mainPageContent.results
+  const existingClients = mainPageContent
     .filter((block) => block.child_page?.title)
     .map((block) => ({
       id: block.id,
       name: block.child_page.title,
     }));
+
+  logger.info(`${existingClients.length} clients retrieved`);
 
   return existingClients || [];
 }
@@ -109,7 +130,7 @@ function getClientId(existingClients, clientName) {
 async function getPageFirstBlock(pageId) {
   const pageDetails = await getPageContent(pageId, 1);
 
-  return pageDetails.results[0];
+  return pageDetails[0];
 }
 
 /**
