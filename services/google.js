@@ -44,9 +44,9 @@ function getHandledEmailAddresses() {
  */
 function isHandledMail(userEmailAddress, fromEmailAddress, toEmailAddress, cc) {
   if (
-    cc == userEmailAddress &&
-    (fromEmailAddress.contains(`@${environment.default.clientDomain}`) ||
-      toEmailAddress.contains(`@${environment.default.clientDomain}`))
+    cc.includes(userEmailAddress) &&
+    (fromEmailAddress.includes(`@${environment.default.clientDomain}`) ||
+      toEmailAddress.includes(`@${environment.default.clientDomain}`))
   ) {
     // If the user is in copie and another yellodit user is already in the from or to, don't import, it will be importer for another user
     return null;
@@ -367,7 +367,7 @@ async function getFormatedMails(userConfig) {
           );
         } else {
           // Fallback to the main body if no parts are found
-          body = msg.data.payload.body
+          body = msg.data.payload.body?.data
             ? base64url.decode(msg.data.payload.body.data)
             : "";
         }
