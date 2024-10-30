@@ -372,7 +372,7 @@ async function getFormatedMails(userConfig) {
             : "";
         }
 
-        body = body.normalize("NFKC");
+        body = body.normalize("NFKC").normalize("NFD").normalize("NFKC");
 
         body = NodeHtmlMarkdown.translate(body);
 
