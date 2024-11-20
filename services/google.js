@@ -250,7 +250,7 @@ function buildGmailQuery(emails) {
     toEmailQuery = `{to:${toEmailQuery}}`;
   }
 
-  const emailQuery = `${fromEmailQuery} OR ${toEmailQuery} NOT label:${environment.default.gmailLabel}`;
+  const emailQuery = `${fromEmailQuery} OR ${toEmailQuery} NOT in:draft NOT label:${environment.default.gmailLabel}`;
 
   logger.info(emailQuery);
 
